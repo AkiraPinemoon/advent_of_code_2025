@@ -47,7 +47,7 @@ pub fn part1() {
 }
 
 pub fn part2() {
-    let mut file = File::open("input/7.txt").unwrap();
+    let mut file = File::open("input/07.txt").unwrap();
     let mut contents = String::new();
     file.read_to_string(&mut contents).unwrap();
 
