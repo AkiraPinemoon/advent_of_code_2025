@@ -1,5 +1,6 @@
-use std::{collections::HashMap, fs::File, io::Read};
+use std::{fs::File, io::Read};
 
+use good_lp::{Expression, ProblemVariables, Solution, SolverModel, default_solver, variable};
 use itertools::Itertools;
 
 pub fn part1() {
@@ -46,17 +47,44 @@ pub fn part2() {
 
     let result: usize = machines
         .into_iter()
-        .take(1)
         .map(|machine| {
-            let mut state = machine.button_masks.clone();
-            state.fill(0);
-            let mut memo = HashMap::new();
-            let result =
-                find_fastest_joltage_solution(&mut None, &mut memo, &machine, &state).unwrap();
+            let mut problem = ProblemVariables::new();
 
-            println!("solved in {result} presses");
+            let vars = machine
+                .buttons
+                .iter()
+                .map(|_button| problem.add(variable().integer().min(0)))
+                .collect_vec();
 
-            result
+            let mut min_expresssion = Expression::from(0);
+            for var in vars.iter() {
+                min_expresssion += var
+            }
+
+            let mut model = problem.minimise(min_expresssion).using(default_solver);
+
+            for counter in 0..machine.joltage_goal.len() {
+                let mut expression = Expression::from(0);
+                for (index, button) in machine.buttons.iter().enumerate() {
+                    if button.contains(&counter) {
+                        expression += vars[index]
+                    }
+                }
+                model = model.with(expression.eq(machine.joltage_goal[counter] as u32))
+            }
+
+            let solution = model.solve().unwrap();
+
+            let results = vars
+                .iter()
+                .map(|var| solution.value(*var).round() as usize)
+                .collect_vec();
+
+            let sum = results.iter().sum::<usize>();
+
+            println!("solved in {:?} = {} presses", results, sum);
+
+            sum
         })
         .sum();
 
@@ -111,72 +139,4 @@ impl Machine {
             joltage_goal,
         }
     }
-}
-
-fn find_fastest_joltage_solution(
-    current_best: &mut Option<usize>,
-    memo: &mut HashMap<Vec<usize>, Option<usize>>,
-    machine: &Machine,
-    state: &Vec<usize>,
-) -> Option<usize> {
-    if let Some(best) = current_best {
-        if state.iter().sum::<usize>() >= *best {
-            return None;
-        }
-    }
-
-    let joltage = get_joltatge_from_state(state, machine);
-
-    if let Some(&result) = memo.get(&joltage) {
-        return result;
-    }
-
-    println!("{state:?}");
-
-    if joltage == machine.joltage_goal {
-        let _ = current_best.insert(state.iter().sum());
-        return Some(0);
-    }
-
-    let possible_buttons = machine
-        .buttons
-        .iter()
-        .enumerate()
-        .filter(|(_, button)| {
-            button
-                .iter()
-                .all(|&index| joltage[index] < machine.joltage_goal[index])
-        })
-        .collect_vec();
-
-    if possible_buttons.is_empty() {
-        memo.insert(joltage.clone(), None);
-        return None;
-    }
-
-    let result = possible_buttons
-        .into_iter()
-        .filter_map(|(i, _button)| {
-            let mut state_after = state.clone();
-            state_after[i] += 1;
-            find_fastest_joltage_solution(current_best, memo, machine, &state_after)
-                .map(|count| count + 1)
-        })
-        .min();
-
-    memo.insert(joltage.clone(), result);
-    result
-}
-
-fn get_joltatge_from_state(state: &Vec<usize>, machine: &Machine) -> Vec<usize> {
-    let mut joltage = machine.joltage_goal.clone();
-    joltage.fill(0);
-
-    for (i, button) in machine.buttons.iter().enumerate() {
-        for effeced in button {
-            joltage[*effeced] += state[i];
-        }
-    }
-
-    joltage
 }
